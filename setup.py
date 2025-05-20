@@ -13,7 +13,7 @@ ext_modules = [
 
 setup(
     name='my-ctools',
-    version='0.1.0',
+    version='0.1.1',
     author='KevinCJM',
     description='Fast column-wise std calculator using C++ thread pool',
     long_description=open('README.md').read(),
