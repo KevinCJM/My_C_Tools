@@ -1,4 +1,4 @@
-name: Build wheels
+name: Build native extension
 
 on:
   push:
@@ -7,38 +7,75 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+    # 1️⃣ 代码
+    - uses: actions/checkout@v4
 
-      - name: Install build dependencies on Linux
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
+    # 2️⃣ Python 3.8（与服务器保持一致）
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.8"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
+    # 3️⃣ 依赖：pybind11（头文件） + linux 下 python3-dev
+    - name: Install build deps
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3.8-dev build-essential
+        python -m pip install -U pip pybind11
+    - name: Install build deps (macOS / Windows)
+      if: runner.os != 'Linux'
+      run: |
+        python -m pip install -U pip pybind11
 
-      - name: Install cibuildwheel
-        run: |
-          python -m pip install --upgrade pip
-          pip install cibuildwheel
+    # 4️⃣ 编译所有 cpp → .so / .pyd
+    - name: Compile C++ extensions
+      shell: bash
+      run: |
+        set -e
+        INCLUDES=$(python -m pybind11 --includes)
 
-      - name: Build wheels
-        run: cibuildwheel --output-dir dist
-        env:
-          CIBW_SKIP: "pp* cp36*"
-          CIBW_BUILD_VERBOSITY: 1
+        # Python 扩展后缀（如 .cpython-38-x86_64-linux-gnu.so）
+        EXT_SUFFIX=$(python - <<'PY'
+import sysconfig, json, sys
+print(sysconfig.get_config_var("EXT_SUFFIX") or "")
+PY
+        )
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.os }}
-          path: dist/*.whl
+        echo "Detected EXT_SUFFIX=${EXT_SUFFIX}"
+        echo "pybind11 includes: ${INCLUDES}"
+
+        for cpp in my_ctools/*.cpp; do
+          mod=$(basename "${cpp}" .cpp)          # 模块名
+          out="my_ctools/${mod}${EXT_SUFFIX}"    # 输出文件
+          echo "----- Building ${cpp} -> ${out}"
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            g++ -O3 -Wall -std=c++17 -fPIC -shared \
+                ${INCLUDES} $(python3-config --ldflags) \
+                "${cpp}" -o "${out}"
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            clang++ -O3 -Wall -std=c++17 -shared -undefined dynamic_lookup \
+                ${INCLUDES} \
+                "${cpp}" -o "${out}"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            # MSVC：/I 追加包含目录；%INCLUDES% 中有空格，需展开为引号
+            cl /nologo /O2 /EHsc /std:c++17 ^
+               %INCLUDES% ^
+               /LD "${cpp}" /link /OUT:"${out}"
+          fi
+          ls -l "${out}"
+        done
+
+    # 5️⃣ 上传产物
+    - name: Upload built binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: my_ctools-${{ matrix.os }}
+        path: my_ctools/*${{ env.EXT_SUFFIX || '*' }}
