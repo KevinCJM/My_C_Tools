@@ -137,7 +137,7 @@ py::dict main_cal_largest_one_for_all(py::array_t<double> array_value,
     return res;
 }
 
-PYBIND11_MODULE(cal_largest_one_cpp,m){
-    m.def("main_cal_largest_one_for_all",&main_cal_largest_one_for_all,
+PYBIND11_MODULE(cal_all_largest_indicators,m){
+    m.def("cal_all_largest_indicators",&main_cal_largest_one_for_all,
           py::arg("array_value"),py::arg("dates"),py::arg("i_code")="positive");
 }

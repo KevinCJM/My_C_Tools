@@ -70,9 +70,9 @@ py::array_t<long> cal_longest_draw_down_recover(py::array_t<double> funds_val)
 }
 
 /* ------------------------------------------------------------------ */
-PYBIND11_MODULE(cal_longest_dd_cpp, m)
+PYBIND11_MODULE(cal_longest_dd_recover, m)
 {
-    m.def("cal_longest_draw_down_recover",
+    m.def("cal_longest_dd_recover",
           &cal_longest_draw_down_recover,
           "Longest drawdown-recovery days per fund (C++ & thread-parallel)");
 }

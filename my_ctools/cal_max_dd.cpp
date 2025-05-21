@@ -124,6 +124,6 @@ py::tuple cal_max_draw_down(py::array_t<double> funds_val,
 /* ---------- Pybind11 导出 ---------- */
 PYBIND11_MODULE(cal_max_dd, m)
 {
-    m.def("cal_max_draw_down", &cal_max_draw_down,
+    m.def("cal_max_dd", &cal_max_draw_down,
           "Compute max drawdown, max drawdown date, and recovery days for each fund (thread-pool parallel)");
 }

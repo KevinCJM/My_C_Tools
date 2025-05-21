@@ -134,9 +134,9 @@ py::tuple main_cal_longest_one_for_all(py::array_t<double>  a_value,
 }
 
 /* --------------------------------------------------------------------- */
-PYBIND11_MODULE(cal_longest_one_cpp, m)
+PYBIND11_MODULE(cal_all_longest_indicators, m)
 {
-    m.def("main_cal_longest_one_for_all",
+    m.def("cal_all_longest_indicators",
           &main_cal_longest_one_for_all,
           py::arg("a_value"), py::arg("dates"),
           py::arg("i_code") = "positive",

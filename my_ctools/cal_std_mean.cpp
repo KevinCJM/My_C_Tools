@@ -1,3 +1,47 @@
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <cmath>
+#include <vector>
+#include <thread>
+
+namespace py = pybind11;
+
+void compute_column_std(double* ptr, size_t rows, size_t cols, size_t j, double* result) {
+    double sum = 0.0, sum_sq = 0.0;
+    size_t count = 0;
+    for (size_t i = 0; i < rows; ++i) {
+        double val = ptr[i * cols + j];
+        if (!std::isnan(val)) {
+            sum += val;
+            sum_sq += val * val;
+            count++;
+        }
+    }
+    if (count > 1) {
+        double mean = sum / count;
+        result[j] = std::sqrt((sum_sq - count * mean * mean) / (count - 1));
+    } else {
+        result[j] = std::nan("");
+    }
+}
+
+py::array_t<double> column_std_threadpool(py::array_t<double> input) {
+    auto buf = input.request();
+    size_t rows = buf.shape[0], cols = buf.shape[1];
+    double* ptr = static_cast<double*>(buf.ptr);
+    std::vector<double> result(cols, std::nan(""));
+    size_t n_threads = std::min(cols, (size_t)std::thread::hardware_concurrency());
+    std::vector<std::thread> threads(n_threads);
+    for (size_t t = 0; t < n_threads; ++t) {
+        threads[t] = std::thread([=, &result]() {
+            for (size_t j = t; j < cols; j += n_threads)
+                compute_column_std(ptr, rows, cols, j, result.data());
+        });
+    }
+    for (auto& t : threads) t.join();
+    return py::array_t<double>(result.size(), result.data());
+}
+
 // simd_mean_std_threadpool.cpp – 使用 SIMD 指令集和 std::thread 线程池（无 OpenMP）进行列统计
 // • x86 架构使用 AVX2 内建函数 | Apple Silicon (ARM) 使用 NEON 内建函数
 // • 在计算均值（mean）和无偏标准差（std, ddof=1）时忽略 NaN 值
@@ -157,10 +201,7 @@ py::array_t<double> mean_std_simd_threadpool(py::array_t<double> input){
     return out;
 }
 
-//------------------------------------------------------------------
-// Pybind11 模块导出
-//------------------------------------------------------------------
-PYBIND11_MODULE(cal_std_mean_simd, m){
-    m.def("mean_std", &mean_std_simd_threadpool,
-          "按列计算均值和标准差（使用 SIMD 和线程池，并忽略 NaN）");
+PYBIND11_MODULE(cal_std_mean, m) {
+    m.def("cal_std_mean", &column_std_threadpool, "Compute column-wise std (ddof=1, ignore NaNs)");
+    m.def("cal_std_mean_simd", &mean_std_simd_threadpool, "Compute column-wise std with SIMD (ddof=1, ignore NaNs)");
 }

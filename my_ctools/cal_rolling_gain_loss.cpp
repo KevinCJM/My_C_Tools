@@ -174,8 +174,8 @@ py::tuple cal_rolling_gain(std::string           i_code,
 }
 
 /* ------------------------------------------------------------------------- */
-PYBIND11_MODULE(cal_rolling_gain_cpp, m)
+PYBIND11_MODULE(cal_rolling_gain_loss, m)
 {
-    m.def("cal_rolling_gain", &cal_rolling_gain,
+    m.def("cal_rolling_gain_loss", &cal_rolling_gain,
           "Fully numpy-consistent C++ implementation of cal_rolling_gain");
 }
