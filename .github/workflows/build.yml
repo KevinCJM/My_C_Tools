@@ -1,4 +1,4 @@
-name: Build native extension
+name: Build native extensions
 
 on:
   push:
@@ -14,68 +14,70 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-    # 1️⃣ 代码
+    # 1️⃣ 拉代码
     - uses: actions/checkout@v4
 
-    # 2️⃣ Python 3.8（与服务器保持一致）
+    # 2️⃣ 安装 Python
     - uses: actions/setup-python@v5
       with:
         python-version: "3.8"
 
-    # 3️⃣ 依赖：pybind11（头文件） + linux 下 python3-dev
-    - name: Install build deps
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3.8-dev build-essential
-        python -m pip install -U pip pybind11
-    - name: Install build deps (macOS / Windows)
-      if: runner.os != 'Linux'
+    # 3️⃣ 安装 pybind11
+    - name: Install pybind11
       run: |
         python -m pip install -U pip pybind11
 
-    # 4️⃣ 编译所有 cpp → .so / .pyd
+    # 4️⃣ 编译 my_ctools/*.cpp -> my_ctools/*.so|*.pyd
     - name: Compile C++ extensions
       shell: bash
       run: |
         set -e
+        # ---------- 公共变量 ----------
         INCLUDES=$(python -m pybind11 --includes)
 
-        # Python 扩展后缀（如 .cpython-38-x86_64-linux-gnu.so）
-        EXT_SUFFIX=$(python - <<'PY'
-import sysconfig, json, sys
-print(sysconfig.get_config_var("EXT_SUFFIX") or "")
-PY
-        )
+        # 使用 python -c 方式避免 heredoc 报错
+        EXT_SUFFIX=$(python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX') or '')")
 
-        echo "Detected EXT_SUFFIX=${EXT_SUFFIX}"
-        echo "pybind11 includes: ${INCLUDES}"
+        echo "Extension suffix: $EXT_SUFFIX"
+        echo "pybind11 includes: $INCLUDES"
+        echo "Runner OS: $RUNNER_OS"
 
+        # ---------- 遍历并编译 ----------
         for cpp in my_ctools/*.cpp; do
-          mod=$(basename "${cpp}" .cpp)          # 模块名
-          out="my_ctools/${mod}${EXT_SUFFIX}"    # 输出文件
-          echo "----- Building ${cpp} -> ${out}"
+          mod=$(basename "$cpp" .cpp)                # 模块名
+          out="my_ctools/${mod}${EXT_SUFFIX}"        # 输出文件
+          echo "---- Building $cpp -> $out"
 
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             g++ -O3 -Wall -std=c++17 -fPIC -shared \
-                ${INCLUDES} $(python3-config --ldflags) \
-                "${cpp}" -o "${out}"
+                $INCLUDES $(python3-config --ldflags) \
+                "$cpp" -o "$out"
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             clang++ -O3 -Wall -std=c++17 -shared -undefined dynamic_lookup \
-                ${INCLUDES} \
-                "${cpp}" -o "${out}"
+                $INCLUDES \
+                "$cpp" -o "$out"
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            # MSVC：/I 追加包含目录；%INCLUDES% 中有空格，需展开为引号
+            # Windows runner 下使用 MSVC cl
+            cpp_win=$(echo "$cpp" | sed 's/\//\\/g')
+            out_win=$(echo "$out" | sed 's/\//\\/g')
             cl /nologo /O2 /EHsc /std:c++17 ^
-               %INCLUDES% ^
-               /LD "${cpp}" /link /OUT:"${out}"
+               /I"%PYTHON_INCLUDE%" ^
+               /LD "$cpp_win" ^
+               /link /OUT:"$out_win"
+          else
+            echo "Unsupported OS"
+            exit 1
           fi
-          ls -l "${out}"
         done
 
+        # 列出生成结果
+        ls -lh my_ctools
+
     # 5️⃣ 上传产物
-    - name: Upload built binaries
+    - name: Upload compiled modules
       uses: actions/upload-artifact@v4
       with:
         name: my_ctools-${{ matrix.os }}
-        path: my_ctools/*${{ env.EXT_SUFFIX || '*' }}
+        path: |
+          my_ctools/*.so
+          my_ctools/*.pyd
