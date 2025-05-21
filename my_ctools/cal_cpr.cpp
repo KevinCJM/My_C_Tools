@@ -105,6 +105,6 @@ py::array_t<double> cal_cpr(py::array_t<int> f_type,
     return py::array_t<double>(F, cpr_list.data());
 }
 
-PYBIND11_MODULE(cal_cpr_old, m) {
+PYBIND11_MODULE(cal_cpr, m) {
     m.def("cal_cpr", &cal_cpr, "Compute CPR using hand-written thread pool (no SIMD)");
 }
